@@ -1,0 +1,82 @@
+{
+  "Logistic Regression": {
+    "malignant": {
+      "precision": 0.975,
+      "recall": 0.9285714285714286,
+      "f1-score": 0.9512195121951219,
+      "support": 126.0
+    },
+    "benign": {
+      "precision": 0.9594594594594594,
+      "recall": 0.9861111111111112,
+      "f1-score": 0.9726027397260274,
+      "support": 216.0
+    },
+    "overall_accuracy": 0.9649122807017544,
+    "macro_f1": 0.9619111259605746
+  },
+  "RBF-SVM": {
+    "malignant": {
+      "precision": 0.9666666666666667,
+      "recall": 0.9206349206349206,
+      "f1-score": 0.943089430894309,
+      "support": 126.0
+    },
+    "benign": {
+      "precision": 0.954954954954955,
+      "recall": 0.9814814814814815,
+      "f1-score": 0.9680365296803652,
+      "support": 216.0
+    },
+    "overall_accuracy": 0.9590643274853801,
+    "macro_f1": 0.9555629802873371
+  },
+  "Frozen QFM": {
+    "malignant": {
+      "precision": 0.9333333333333333,
+      "recall": 0.1111111111111111,
+      "f1-score": 0.19858156028368795,
+      "support": 126.0
+    },
+    "benign": {
+      "precision": 0.6574923547400612,
+      "recall": 0.9953703703703703,
+      "f1-score": 0.7918968692449355,
+      "support": 216.0
+    },
+    "overall_accuracy": 0.6695906432748538,
+    "macro_f1": 0.49523921476431176
+  },
+  "Trainable VQC": {
+    "malignant": {
+      "precision": 1.0,
+      "recall": 0.023809523809523808,
+      "f1-score": 0.046511627906976744,
+      "support": 126.0
+    },
+    "benign": {
+      "precision": 0.6371681415929203,
+      "recall": 1.0,
+      "f1-score": 0.7783783783783784,
+      "support": 216.0
+    },
+    "overall_accuracy": 0.6403508771929824,
+    "macro_f1": 0.41244500314267757
+  },
+  "Quantum Kernel SVM": {
+    "malignant": {
+      "precision": 0.943089430894309,
+      "recall": 0.9206349206349206,
+      "f1-score": 0.9317269076305221,
+      "support": 126.0
+    },
+    "benign": {
+      "precision": 0.954337899543379,
+      "recall": 0.9675925925925926,
+      "f1-score": 0.960919540229885,
+      "support": 216.0
+    },
+    "overall_accuracy": 0.9502923976608187,
+    "macro_f1": 0.9463232239302035
+  }
+}

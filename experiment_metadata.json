@@ -1,0 +1,10 @@
+{
+  "unique_experimental_records": 521,
+  "new_experimental_records": 89,
+  "external_primary_records": 42,
+  "encoding_ablation_records": 12,
+  "seed_expansion_records": 35,
+  "sensitivity_pair_count": 10,
+  "paired_difference_sd_LR_minus_QK_8D": 0.012439793793089264,
+  "paired_difference_mean_LR_minus_QK_8D": 0.006140350877192969
+}

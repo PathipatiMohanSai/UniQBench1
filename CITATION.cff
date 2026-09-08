@@ -1,0 +1,6 @@
+cff-version: 1.2.0
+message: "Please cite the UniQBench manuscript and repository when using these benchmark artifacts."
+title: "UniQBench"
+authors:
+  - family-names: "Pathipati Mohan Sai"
+repository-code: "https://github.com/PathipatiMohanSai/UniQBench"
