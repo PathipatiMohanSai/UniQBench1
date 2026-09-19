@@ -4,7 +4,7 @@ Revised reproducible benchmark manuscript and supporting artifacts for:
 
 **UniQBench: A Reproducible Framework for Evaluating Quantum Machine Learning Across Model Families, Noise Levels, and Shot Budgets**
 
-Repository: https://github.com/PathipatiMohanSai/UniQBench-
+Repository: https://github.com/PathipatiMohanSai/UniQBench1
 
 Release package: `release_2026_09/` (mirrored in the public repository).
 
