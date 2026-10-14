@@ -1,0 +1,23 @@
+UniQBench Step 2 shared-split patch completed.
+Release root: C:\Users\pmoha\OneDrive\Desktop\RESEARCH PAPER\UniQBench_MNIST_submission_release_v1
+Frozen result directories were not modified.
+
+Changes:
+- data.py: added make_split_indices()
+- data.py: prepare_data() now calls make_split_indices()
+- integrity checker: imports make_split_indices()
+- integrity checker: uses Module 2 split helper
+- manifest script: imports make_split_indices()
+- manifest script: uses Module 2 split helper
+- tests: added deterministic shared-split test
+- README: documented shared deterministic split helper
+- report.py: documented shared deterministic split helper
+
+Checks:
+- data_helper_present: True
+- data_uses_helper: True
+- checker_uses_helper: True
+- manifest_uses_helper: True
+- test_uses_helper: True
+- readme_documents_helper: True
+- report_documents_helper: True

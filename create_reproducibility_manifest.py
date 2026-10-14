@@ -1,0 +1,349 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import platform
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+import numpy as np
+from sklearn.datasets import fetch_openml
+from sklearn.model_selection import train_test_split
+
+from uniqbench.config import default_config
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+RESULTS_DIR = (
+    PROJECT_ROOT
+    / "results_mnist_final_comparison_v1"
+)
+
+MODULE_FILES = [
+    PROJECT_ROOT / "uniqbench" / "analysis.py",
+    PROJECT_ROOT / "uniqbench" / "backends.py",
+    PROJECT_ROOT / "uniqbench" / "benchmark.py",
+    PROJECT_ROOT / "uniqbench" / "circuit.py",
+    PROJECT_ROOT / "uniqbench" / "config.py",
+    PROJECT_ROOT / "uniqbench" / "data.py",
+    PROJECT_ROOT / "uniqbench" / "metrics.py",
+    PROJECT_ROOT / "uniqbench" / "model.py",
+    PROJECT_ROOT / "uniqbench" / "report.py",
+    PROJECT_ROOT / "uniqbench" / "training.py",
+]
+
+RUN_PROJECT = PROJECT_ROOT / "run_project.py"
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+
+    return digest.hexdigest()
+
+
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def get_pip_freeze() -> list[str]:
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "freeze"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    return sorted(
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip()
+    )
+
+
+def prepare_mnist_indices(config, seed: int):
+    """
+    Reproduce the exact index-generation procedure used by data.py.
+
+    Returned indices are indices into the filtered 0/1 MNIST dataset,
+    not indices into the original 70,000-row MNIST dataset.
+    """
+    cache_dir = config.root / "data_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    mnist = fetch_openml(
+        name="mnist_784",
+        version=1,
+        as_frame=False,
+        data_home=str(cache_dir),
+    )
+
+    X = np.asarray(mnist.data, dtype=np.float32) / 255.0
+    y_raw = np.asarray(mnist.target, dtype=np.int64)
+
+    mask = np.isin(y_raw, config.classes)
+
+    X = X[mask]
+    y_raw = y_raw[mask]
+
+    label_map = {
+        config.classes[0]: 0,
+        config.classes[1]: 1,
+    }
+
+    y = np.array(
+        [label_map[int(value)] for value in y_raw],
+        dtype=np.int64,
+    )
+
+    # This reproduces _dataset_hash(X, y) in data.py.
+    dataset_hasher = hashlib.sha256()
+    dataset_hasher.update(np.ascontiguousarray(X).tobytes())
+    dataset_hasher.update(np.ascontiguousarray(y).tobytes())
+    filtered_dataset_hash = dataset_hasher.hexdigest()[:16]
+
+    all_indices = np.arange(len(X))
+
+    train_indices, remaining_indices = train_test_split(
+        all_indices,
+        train_size=config.train_size,
+        stratify=y,
+        random_state=seed,
+    )
+
+    val_indices, test_indices = train_test_split(
+        remaining_indices,
+        train_size=config.validation_size,
+        test_size=config.test_size,
+        stratify=y[remaining_indices],
+        random_state=seed + 1,
+    )
+
+    return {
+        "train_indices": train_indices.tolist(),
+        "validation_indices": val_indices.tolist(),
+        "test_indices": test_indices.tolist(),
+        "class_counts": {
+            "train": np.bincount(
+                y[train_indices], minlength=2
+            ).tolist(),
+            "validation": np.bincount(
+                y[val_indices], minlength=2
+            ).tolist(),
+            "test": np.bincount(
+                y[test_indices], minlength=2
+            ).tolist(),
+        },
+        "filtered_dataset_hash": filtered_dataset_hash,
+        "filtered_shape": list(X.shape),
+    }
+
+
+def main() -> None:
+    config = default_config()
+
+    if not RESULTS_DIR.exists():
+        raise FileNotFoundError(
+            f"Final results directory not found: {RESULTS_DIR}"
+        )
+
+    # ---------------------------------------------------------
+    # Source-code hashes
+    # ---------------------------------------------------------
+    source_hashes = {}
+
+    for path in MODULE_FILES + [RUN_PROJECT]:
+        if not path.exists():
+            raise FileNotFoundError(f"Required source file missing: {path}")
+
+        source_hashes[str(path.relative_to(PROJECT_ROOT))] = sha256_file(path)
+
+    # ---------------------------------------------------------
+    # Python + package environment
+    # ---------------------------------------------------------
+    python_version = sys.version
+    python_version_short = platform.python_version()
+
+    pip_freeze = get_pip_freeze()
+
+    pip_freeze_text = "\n".join(pip_freeze) + "\n"
+    pip_freeze_hash = sha256_bytes(
+        pip_freeze_text.encode("utf-8")
+    )
+
+    # Save exact pip freeze separately.
+    (RESULTS_DIR / "pip_freeze.txt").write_text(
+        pip_freeze_text,
+        encoding="utf-8",
+    )
+
+    (RESULTS_DIR / "python_version.txt").write_text(
+        python_version,
+        encoding="utf-8",
+    )
+
+    # ---------------------------------------------------------
+    # Exact final-result file hashes
+    # ---------------------------------------------------------
+    result_files = [
+        RESULTS_DIR / "raw" / "benchmark_runs.jsonl",
+        RESULTS_DIR / "raw" / "benchmark_runs.csv",
+        RESULTS_DIR / "processed" / "aggregate_results.csv",
+        RESULTS_DIR / "processed" / "overall_summary.csv",
+        RESULTS_DIR / "processed" / "nps_results.csv",
+        RESULTS_DIR / "processed" / "run_manifest.json",
+    ]
+
+    result_hashes = {}
+
+    for path in result_files:
+        if path.exists():
+            result_hashes[
+                str(path.relative_to(PROJECT_ROOT))
+            ] = sha256_file(path)
+
+    # ---------------------------------------------------------
+    # Exact MNIST split indices and filtered dataset hash
+    # ---------------------------------------------------------
+    seed_records = {}
+
+    filtered_dataset_hashes = set()
+
+    for seed in config.seeds:
+        split_info = prepare_mnist_indices(config, seed)
+
+        seed_records[str(seed)] = split_info
+        filtered_dataset_hashes.add(
+            split_info["filtered_dataset_hash"]
+        )
+
+    if len(filtered_dataset_hashes) != 1:
+        raise RuntimeError(
+            "Filtered dataset hash changed across seeds."
+        )
+
+    filtered_dataset_hash = next(
+        iter(filtered_dataset_hashes)
+    )
+
+    # ---------------------------------------------------------
+    # Final-run identifier
+    # ---------------------------------------------------------
+    identity_payload = {
+        "config_hash": config.config_hash(),
+        "source_hashes": source_hashes,
+        "pip_freeze_hash": pip_freeze_hash,
+        "filtered_dataset_hash": filtered_dataset_hash,
+        "result_hashes": result_hashes,
+        "seeds": list(config.seeds),
+    }
+
+    identity_bytes = json.dumps(
+        identity_payload,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+    final_run_id = (
+            "mnist_final_comparison_v1-"
+            + hashlib.sha256(identity_bytes).hexdigest()[:16]
+    )
+
+    # ---------------------------------------------------------
+    # Complete manifest
+    # ---------------------------------------------------------
+    manifest = {
+        "final_run_id": final_run_id,
+        "manifest_generated_at": datetime.now(
+            timezone.utc
+        ).isoformat(),
+
+        "configuration": {
+            "config_hash": config.config_hash(),
+            "dataset_name": config.dataset_name,
+            "openml_dataset": "mnist_784",
+            "openml_version": 1,
+            "classes": list(config.classes),
+            "label_map": {"0": 0, "1": 1},
+            "n_components": list(config.n_components),
+            "qubit_widths": list(config.qubit_widths),
+            "depths": list(config.depths),
+            "seeds": list(config.seeds),
+            "train_size": config.train_size,
+            "validation_size": config.validation_size,
+            "test_size": config.test_size,
+            "epochs": config.epochs,
+            "batch_size": config.batch_size,
+            "learning_rate": config.learning_rate,
+            "shots": config.shots,
+            "backend_names": list(config.backend_names),
+            "noise_probability": config.noise_probability,
+            "max_samples_per_run": config.max_samples_per_run,
+            "output_dir": str(config.results_root),
+        },
+
+        "software_environment": {
+            "python_version": python_version,
+            "python_version_short": python_version_short,
+            "pip_freeze_sha256": pip_freeze_hash,
+            "pip_freeze_file": "pip_freeze.txt",
+        },
+
+        "source_code_sha256": {
+            **source_hashes,
+        },
+
+        "dataset": {
+            "name": "mnist_784",
+            "source": "OpenML",
+            "version": 1,
+            "filtered_classes": [0, 1],
+            "filtered_shape": [14780, 784],
+            "filtered_dataset_hash": filtered_dataset_hash,
+            "hash_definition": (
+                "SHA-256 over contiguous filtered X bytes "
+                "followed by contiguous filtered y bytes; "
+                "X scaled by 1/255 before hashing."
+            ),
+        },
+
+        "exact_split_indices": seed_records,
+
+        "backend_settings": {
+            "backend_names": list(config.backend_names),
+            "shots": config.shots,
+            "noise_probability": config.noise_probability,
+        },
+
+        "final_result_hashes": result_hashes,
+    }
+
+    manifest_path = (
+        RESULTS_DIR / "reproducibility_manifest.json"
+    )
+
+    manifest_path.write_text(
+        json.dumps(
+            manifest,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    print("Reproducibility manifest created:")
+    print(manifest_path)
+    print("Final run ID:", final_run_id)
+    print("Configuration hash:", config.config_hash())
+    print("Filtered dataset hash:", filtered_dataset_hash)
+    print("Python:", python_version_short)
+    print("Source files hashed:", len(source_hashes))
+    print("Seeds recorded:", list(config.seeds))
+
+
+if __name__ == "__main__":
+    main()
